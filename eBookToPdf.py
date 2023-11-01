@@ -6,10 +6,10 @@ import mss.tools
 import pyautogui
 import natsort
 import shutil
-
-from pynput import mouse
-from pynput.keyboard import Key, Controller
 from PIL import Image
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
+
 
 from PySide6.QtCore import QSize, Qt
 from PySide6.QtWidgets import QApplication, QWidget, QLabel, QLineEdit, QPushButton, QMainWindow, QVBoxLayout, \
@@ -214,78 +214,78 @@ class MainWindow(QMainWindow):
         m = mouse.Controller()
         mouse_left = mouse.Button.left
         kb_control = Controller()
+try:
+        # 화면 전환 위해 한번 클릭
+        time.sleep(2)
+        m.position = (self.posX1, self.posY1)
 
-        try:
-            # 화면 전환 위해 한번 클릭
-            time.sleep(2)
-            m.position = (self.posX1, self.posY1)
+        time.sleep(2)
+        m.click(mouse_left)
+        time.sleep(2)
+        m.position = (pos_x, pos_y)
 
-            time.sleep(2)
-            m.click(mouse_left)
-            time.sleep(2)
-            m.position = (pos_x, pos_y)
+        # 파일 저장
+        while self.num <= self.total_page:
 
-            # 파일 저장
-            while self.num <= self.total_page:
+            time.sleep(self.speed)
 
-                time.sleep(self.speed)
+            # 캡쳐하기
+            with mss.mss() as sct:
+                # Grab the data
+                img = sct.grab(self.region)
+                # Save to a JPG file
+                jpg_filename = f'pdf_images/img_{str(self.num).zfill(4)}.jpg'
+                with open(jpg_filename, 'wb') as f:
+                    f.write(img.rgb)
 
-                # 캡쳐하기
-                with mss.mss() as sct:
-                    # Grab the data
-                    img = sct.grab(self.region)
-                    # Save to the picture file
-                    mss.tools.to_png(img.rgb, img.size, output=f'pdf_images/img_{str(self.num).zfill(4)}.png')
+            # 페이지 넘기기
+            kb_control.press(Key.right)
+            kb_control.release(Key.right)
 
-                # 페이지 넘기기
-                kb_control.press(Key.right)
-                kb_control.release(Key.right)
+            self.num += 1
 
-                self.num += 1
+        print("캡쳐 완료!")
+        self.stat.setText('PDF 변환 중..')
+        path = 'pdf_images'
+        # 이미지 파일 리스트
+        self.file_list = os.listdir(path)
+        self.file_list = natsort.natsorted(self.file_list)
 
-            print("캡쳐 완료!")
-            self.stat.setText('PDF 변환 중..')
-            path = 'pdf_images'
-            # 이미지 파일 리스트
-            self.file_list = os.listdir(path)
-            self.file_list = natsort.natsorted(self.file_list)
+        # .DS_Store 파일이름 삭제
+        if '.DS_Store' in self.file_list:
+            del self.file_list[0]
 
-            # .DS_Store 파일이름 삭제
-            if '.DS_Store' in self.file_list:
-                del self.file_list[0]
+        img_list = []
 
-            img_list = []
+        for i in self.file_list:
+            jpg_path = 'pdf_images/' + i
+            im_buf = Image.open(jpg_path)
+            img_list.append(im_buf)
 
-            # PDF 첫 페이지 만들어두기
-            img_path = 'pdf_images/' + self.file_list[0]
-            im_buf = Image.open(img_path)
-            cvt_rgb_0 = im_buf.convert('RGB')
+        pdf_name = self.input2.text()
+        if pdf_name == '':
+            pdf_name = 'default'
 
-            for i in self.file_list:
-                img_path = 'pdf_images/' + i
-                im_buf = Image.open(img_path)
-                cvt_rgb = im_buf.convert('RGB')
-                img_list.append(cvt_rgb)
+        pdf_filename = pdf_name + '.pdf'
 
-            del img_list[0]
+        # Create a PDF file and add JPG images to it
+        c = canvas.Canvas(pdf_filename, pagesize=letter)
+        for img in img_list:
+            c.drawImage(img, 0, 0, width=letter[0], height=letter[1])
+            c.showPage()
+        c.save()
 
-            pdf_name = self.input2.text()
-            if pdf_name == '':
-                pdf_name = 'default'
+        print("PDF 변환 완료!")
+        self.stat.setText('PDF 변환 완료!')
+        shutil.rmtree('pdf_images/')
 
-            cvt_rgb_0.save(pdf_name+'.pdf', save_all=True, append_images=img_list)
-            print("PDF 변환 완료!")
-            self.stat.setText('PDF 변환 완료!')
-            shutil.rmtree('pdf_images/')
+    except Exception as e:
+        print('예외 발생. ', e)
+        self.stat.setText('오류 발생. 종료 후 다시 시도해주세요.')
 
-        except Exception as e:
-            print('예외 발생. ', e)
-            self.stat.setText('오류 발생. 종료 후 다시 시도해주세요.')
-
-        finally:
-            self.num = 1
-            self.file_list = []
-
+    finally:
+        self.num = 1
+        self.file_list = []
 
 app = QApplication(sys.argv)
 
